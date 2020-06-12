@@ -1,0 +1,58 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Serverless 'interactive' Shell function"
+
+Metadata:
+  Author: Tamás Kiss
+
+Parameters:
+  LambdaTimeoutInSeconds:
+    Type: Number
+    Description: "Maximum time the lambda should run before it times out"
+    Default: 60  # max timeout right now it's 15 minutes aka 900
+
+Resources:
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sls-shell
+      Code:
+        ZipFile: |
+          import os
+          import json
+
+          def lambda_handler(event, context):
+              stream = os.popen(event["cmd"])
+              output = stream.read()
+              data = {}
+              data["output"] = output
+              json.dumps(data)
+              return data
+      Description: "Lambda function to exc the invokation in shell"
+      Handler: "index.lambda_handler"
+      MemorySize: 128   # MB
+      Role: !GetAtt LambdaIAMRole.Arn
+      Runtime: "python3.7"
+      Timeout: !Ref LambdaTimeoutInSeconds
+
+  LambdaIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: wo-lambda-cloudwatch-logs
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"

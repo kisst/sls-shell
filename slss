@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+# -*- coding: utf8 -*-
+"""
+This is the local function sending over the commands to the Lambda function
+"""
+from cmd import Cmd
+import json
+import boto3
+
+PROFILE = "default"
+REGION = "eu-west-2"
+
+SESSION = boto3.Session(profile_name=PROFILE, region_name=REGION)
+
+
+def settings(key, value):
+    """
+    Function to set things like region or profile
+    """
+    global PROFILE
+    global REGION
+    global SESSION
+    if key == "PROFILE":
+        PROFILE = value
+    elif key == "REGION":
+        REGION = value
+    else:
+        print("Not know variable")
+    SESSION = boto3.Session(profile_name=PROFILE, region_name=REGION)
+
+
+def run_it_on_lambda(command):
+    """
+    This function fire up the command to lambda and return the returned value
+    """
+    lambda_response = SESSION.client("lambda").invoke(
+        FunctionName="sls-shell",
+        InvocationType="RequestResponse",
+        Payload=json.dumps(command),
+    )
+    lambda_response = json.loads(lambda_response["Payload"].read())
+    return lambda_response
+
+
+class MyPrompt(Cmd):
+    prompt = "lambda> "
+    intro = "Welcome! Type ? to list commands"
+
+    def do_exit(self, inp):
+        print("Bye")
+        return True
+
+    def do_set(self, inp):
+        print("Setup {}".format(inp))
+        settings(inp.split()[0], inp.split()[1])
+
+    def help_set(self):
+        print("set new REGION, or PROFILE for AWS")
+        print("use it as: set REGION eu-west-1")
+
+    def help_exit(self):
+        print("exit the application. Shorthand: x q Ctrl-D.")
+
+    def default(self, inp):
+        if inp in ["x" or "q"]:
+            return self.do_exit(inp)
+        payload = {}
+        payload["cmd"] = inp
+        response = run_it_on_lambda(payload)
+        print(response["output"])
+
+
+if __name__ == "__main__":
+    MyPrompt().cmdloop()
